@@ -1,0 +1,233 @@
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+
+void main() => runApp(const MaterialApp(home: IsometricStudio3D(), debugShowCheckedModeBanner: false));
+
+class IsometricStudio3D extends StatefulWidget {
+  const IsometricStudio3D({super.key});
+
+  @override
+  State<IsometricStudio3D> createState() => _IsometricStudio3DState();
+}
+
+class _IsometricStudio3DState extends State<IsometricStudio3D> with SingleTickerProviderStateMixin {
+  final TextEditingController _input = TextEditingController(text: "50");
+  String _category = "SICAKLIK";
+  late AnimationController _controller;
+
+  double get _intensity {
+    double val = double.tryParse(_input.text.replaceAll(',', '')) ?? 0.0;
+    if (val <= 0) return 0.0;
+    // Logaritmik ölçeklendirme: Sınırsız veri girişi desteği
+    return (math.log(val + 1) / math.log(1e15)).clamp(0.0, 1.0);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _input.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
+      body: Center(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 1080x1080 Kare Sahne Alanı
+              Container(
+                width: 500, height: 500,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F7FA),
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 40, offset: const Offset(10, 20)),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 40),
+                    Text(_category, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w900, color: Color(0xFF1A1C1E), letterSpacing: 6)),
+                    const SizedBox(height: 10),
+                    Icon(_getIcon(), size: 36, color: Colors.blueGrey.withAlpha(100)),
+                    
+                    Expanded(
+                      child: AnimatedBuilder(
+                        animation: _controller,
+                        builder: (context, child) => CustomPaint(
+                          size: Size.infinite,
+                          painter: IsometricPBRPainter(
+                            category: _category,
+                            intensity: _intensity,
+                            anim: _controller.value,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 30),
+              _buildModernInput(),
+              _buildCategorySwitch(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernInput() {
+    return Container(
+      width: 250,
+      margin: const EdgeInsets.only(bottom: 20),
+      child: TextField(
+        controller: _input,
+        textAlign: TextAlign.center,
+        onChanged: (v) => setState(() {}),
+        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w300),
+        decoration: const InputDecoration(hintText: "Değer girin", border: InputBorder.none),
+      ),
+    );
+  }
+
+  Widget _buildCategorySwitch() {
+    final cats = ["SICAKLIK", "BASINÇ", "DEBİ", "ENERJİ", "UZUNLUK"];
+    return Wrap(
+      spacing: 8,
+      children: cats.map((c) => ActionChip(
+        label: Text(c, style: TextStyle(fontSize: 10, color: _category == c ? Colors.white : Colors.black54)),
+        backgroundColor: _category == c ? Colors.black : Colors.white,
+        onPressed: () => setState(() => _category = c),
+      )).toList(),
+    );
+  }
+
+  IconData _getIcon() {
+    switch (_category) {
+      case "SICAKLIK": return Icons.thermostat;
+      case "BASINÇ": return Icons.air;
+      case "DEBİ": return Icons.anchor;
+      case "ENERJİ": return Icons.lightbulb;
+      case "UZUNLUK": return Icons.straighten;
+      default: return Icons.category;
+    }
+  }
+}
+
+class IsometricPBRPainter extends CustomPainter {
+  final String category;
+  final double intensity;
+  final double anim;
+
+  IsometricPBRPainter({required this.category, required this.intensity, required this.anim});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    
+    // Yumuşak Ambient Occlusion Gölgesi
+    final shadowPaint = Paint()..color = Colors.black.withOpacity(0.06)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
+    canvas.drawOval(Rect.fromCenter(center: center + const Offset(0, 80), width: 120, height: 35), shadowPaint);
+
+    if (category == "SICAKLIK") _drawBoilingGlass(canvas, center);
+    if (category == "BASINÇ") _drawBalloon(canvas, center);
+    if (category == "DEBİ") _drawHeavyBag(canvas, center);
+    if (category == "ENERJİ") _drawBulb(canvas, center);
+    if (category == "UZUNLUK") _drawRuler(canvas, center);
+  }
+
+  void _drawBoilingGlass(Canvas canvas, Offset center) {
+    // İzometrik Cam Kap (PBR Shader Simülasyonu)
+    final glassRect = Rect.fromCenter(center: center, width: 90, height: 160);
+    final glassPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Colors.white.withOpacity(0.5), Colors.white.withOpacity(0.1)],
+      ).createShader(glassRect);
+    
+    canvas.drawRRect(RRect.fromRectAndRadius(glassRect, const Radius.circular(30)), glassPaint);
+
+    // Su (Sıvı kıvamı)
+    final waterColor = Color.lerp(Colors.cyan.withOpacity(0.4), Colors.redAccent.withOpacity(0.6), intensity)!;
+    double fill = 140 * intensity.clamp(0.1, 0.95);
+    final waterRect = Rect.fromLTWH(center.dx - 40, center.dy + 70 - fill, 80, fill);
+    canvas.drawRRect(RRect.fromRectAndRadius(waterRect, const Radius.circular(25)), Paint()..color = waterColor);
+
+    // Kaynama Efekti
+    if (intensity > 0.4) {
+      final rand = math.Random(42);
+      for (int i = 0; i < (25 * intensity).toInt(); i++) {
+        double x = center.dx - 30 + (rand.nextDouble() * 60);
+        double y = (center.dy + 60) - ((anim + rand.nextDouble()) % 1.0) * fill;
+        canvas.drawCircle(Offset(x, y), 1.5, Paint()..color = Colors.white.withOpacity(0.3));
+      }
+    }
+  }
+
+  void _drawBalloon(Canvas canvas, Offset center) {
+    double scale = 0.8 + (intensity * 1.0);
+    final color = Color.lerp(Colors.blue[200], Colors.deepOrangeAccent, intensity)!;
+    
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.scale(scale);
+    
+    // Balon Gövdesi
+    canvas.drawCircle(Offset.zero, 45, Paint()..color = color);
+    
+    // Parlama Efekti (Hata veren yer düzeltildi: const kaldırıldı)
+    final grad = RadialGradient(
+      center: const Alignment(-0.3, -0.3),
+      colors: [Colors.white.withOpacity(0.6), Colors.transparent],
+    ).createShader(Rect.fromCircle(center: Offset.zero, radius: 45));
+    
+    canvas.drawCircle(Offset.zero, 45, Paint()..shader = grad);
+    canvas.restore();
+  }
+
+  void _drawHeavyBag(Canvas canvas, Offset center) {
+    double stretch = intensity * 70;
+    final bagPaint = Paint()..color = const Color(0xFFD2B48C);
+    
+    var path = Path()
+      ..moveTo(center.dx - 30, center.dy - 60)
+      ..lineTo(center.dx + 30, center.dy - 60)
+      ..lineTo(center.dx + 45, center.dy + 20 + stretch)
+      ..quadraticBezierTo(center.dx, center.dy + 45 + stretch, center.dx - 45, center.dy + 20 + stretch)
+      ..close();
+    
+    canvas.drawPath(path, bagPaint);
+    canvas.drawCircle(center + Offset(0, 10 + stretch), 5 + (intensity * 10), Paint()..color = Colors.black12);
+  }
+
+  void _drawBulb(Canvas canvas, Offset center) {
+    final glow = Paint()
+      ..color = Colors.orangeAccent.withOpacity(0.3 * intensity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30);
+    
+    if (intensity > 0.1) canvas.drawCircle(center, 40 + (intensity * 30), glow);
+    canvas.drawCircle(center, 40, Paint()..color = Color.lerp(Colors.grey[300], Colors.yellowAccent, intensity)!);
+  }
+
+  void _drawRuler(Canvas canvas, Offset center) {
+    double len = 40 + (intensity * 240);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: center, width: len, height: 25), const Radius.circular(5)), Paint()..color = Colors.amber[400]!);
+    for(int i = 0; i < len / 10; i++) {
+      canvas.drawLine(Offset(center.dx - len/2 + i*10, center.dy - 12), Offset(center.dx - len/2 + i*10, center.dy - 4), Paint()..color = Colors.black26);
+    }
+  }
+
+  @override bool shouldRepaint(covariant CustomPainter old) => true;
+}
